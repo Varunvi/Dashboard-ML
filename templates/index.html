@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crude Oil Price Prediction & ML Diagnostic Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8'
+            },
+            svr: '#ef4444',
+            rf: '#10b981',
+            actual: '#6366f1',
+            naive: '#a855f7'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    code, .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(51, 65, 85, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col custom-scrollbar">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <i data-lucide="droplet" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">PETRO-PREDICT AI</h1>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">SVR & RF ML ENGINE</span>
+          </div>
+          <p class="text-xs text-slate-400">Crude Oil Price Forecasting, Diagnostics & Scenario Simulator</p>
+        </div>
+      </div>
+
+      <!-- Quick Market Stats & Actions -->
+      <div class="flex items-center space-x-4">
+        <!-- Live Quick Stats -->
+        <div class="hidden md:flex items-center space-x-6 border-r border-slate-800 pr-6">
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Latest Price</div>
+            <div class="text-sm font-bold font-mono text-emerald-400" id="headerLatestPrice">$---</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">MoM Delta</div>
+            <div class="text-sm font-bold font-mono" id="headerMomDelta">---</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">OPEC Stance</div>
+            <div class="text-sm font-semibold" id="headerOpecStance">---</div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <a href="/api/export" class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+          <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+          <span>Export Excel</span>
+        </a>
+
+        <button onclick="switchTab('tab-upload')" class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/30 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span>Retrain / Upload</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-slate-800/60 overflow-x-auto custom-scrollbar">
+      <nav class="flex space-x-1 py-2 text-sm" id="navTabs">
+        <button onclick="switchTab('tab-overview')" data-tab="tab-overview" class="tab-btn active px-3 py-1.5 rounded-md font-medium text-blue-400 bg-blue-500/10 flex items-center space-x-2 transition">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>Overview & Benchmarks</span>
+        </button>
+        <button onclick="switchTab('tab-predictions')" data-tab="tab-predictions" class="tab-btn px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-2 transition">
+          <i data-lucide="trending-up" class="w-4 h-4"></i>
+          <span>Predictions & Residuals</span>
+        </button>
+        <button onclick="switchTab('tab-eda')" data-tab="tab-eda" class="tab-btn px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-2 transition">
+          <i data-lucide="pie-chart" class="w-4 h-4"></i>
+          <span>Market EDA</span>
+        </button>
+        <button onclick="switchTab('tab-diagnostics')" data-tab="tab-diagnostics" class="tab-btn px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-2 transition">
+          <i data-lucide="cpu" class="w-4 h-4"></i>
+          <span>Model Diagnostics</span>
+        </button>
+        <button onclick="switchTab('tab-simulator')" data-tab="tab-simulator" class="tab-btn px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-2 transition">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+          <span>What-If Simulator</span>
+        </button>
+        <button onclick="switchTab('tab-data')" data-tab="tab-data" class="tab-btn px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-2 transition">
+          <i data-lucide="database" class="w-4 h-4"></i>
+          <span>Dataset Explorer</span>
+        </button>
+        <button onclick="switchTab('tab-upload')" data-tab="tab-upload" class="tab-btn px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center space-x-2 transition">
+          <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+          <span>Upload & Tuning</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+    <!-- Loading State Banner -->
+    <div id="loadingBanner" class="hidden mb-6 p-4 rounded-xl bg-blue-900/40 border border-blue-500/50 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <svg class="animate-spin h-5 w-5 text-blue-400" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-sm font-medium text-blue-200" id="loadingText">Training models and generating diagnostic curves...</span>
+      </div>
+    </div>
+
+    <!-- TAB 1: OVERVIEW & BENCHMARKS -->
+    <div id="tab-overview" class="tab-content space-y-6">
+
+      <!-- Executive Metric Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- SVR Performance Card -->
+        <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-rose-500/10 rounded-full blur-xl group-hover:bg-rose-500/20 transition"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-rose-400 uppercase tracking-wider">SVR Model (Tuned)</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 font-mono" id="svrKernelBadge">RBF</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div>
+              <div class="text-2xl font-bold font-mono text-white" id="svrR2Val">--</div>
+              <div class="text-xs text-slate-400 mt-0.5">Test R² Score</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold font-mono text-slate-300" id="svrMaeVal">--</div>
+              <div class="text-xs text-slate-500">Test MAE ($)</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs">
+            <span class="text-slate-400">RMSE / MAPE:</span>
+            <span class="font-mono text-slate-200" id="svrExtraMetrics">--</span>
+          </div>
+        </div>
+
+        <!-- RF Performance Card -->
+        <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Random Forest</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono" id="rfTreesBadge">100 Trees</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div>
+              <div class="text-2xl font-bold font-mono text-white" id="rfR2Val">--</div>
+              <div class="text-xs text-slate-400 mt-0.5">Test R² Score</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold font-mono text-slate-300" id="rfMaeVal">--</div>
+              <div class="text-xs text-slate-500">Test MAE ($)</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs">
+            <span class="text-slate-400">RMSE / MAPE:</span>
+            <span class="font-mono text-slate-200" id="rfExtraMetrics">--</span>
+          </div>
+        </div>
+
+        <!-- Naive Benchmark Card -->
+        <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-purple-400 uppercase tracking-wider">Naive Baseline</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 font-mono">P(t) = P(t-1)</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div>
+              <div class="text-2xl font-bold font-mono text-white" id="naiveR2Val">--</div>
+              <div class="text-xs text-slate-400 mt-0.5">Test R² Score</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold font-mono text-slate-300" id="naiveMaeVal">--</div>
+              <div class="text-xs text-slate-500">Test MAE ($)</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs">
+            <span class="text-slate-400">Benchmark bar:</span>
+            <span class="text-purple-300">Must beat to add value</span>
+          </div>
+        </div>
+
+        <!-- Dataset & Split Card -->
+        <div class="glass-panel p-5 rounded-2xl relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-500/10 rounded-full blur-xl group-hover:bg-blue-500/20 transition"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-blue-400 uppercase tracking-wider">Dataset & Split</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 font-mono" id="splitBadge">70 / 30</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div>
+              <div class="text-2xl font-bold font-mono text-white" id="totalRecordsVal">--</div>
+              <div class="text-xs text-slate-400 mt-0.5">Total Observations</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold font-mono text-amber-400" id="outliersVal">--</div>
+              <div class="text-xs text-slate-500">IQR Outliers</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-400">
+            <span>Date Range:</span>
+            <span class="font-mono text-slate-300" id="dateRangeVal">-- → --</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comparison Charts & Overfitting Diagnostics -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Model Comparison Metrics Bar Chart -->
+        <div class="glass-panel p-5 rounded-2xl lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Model Performance Benchmark</h2>
+              <p class="text-xs text-slate-400">Comparing SVR vs Random Forest against Naive Baseline</p>
+            </div>
+            <div class="flex items-center space-x-2 text-xs">
+              <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block mr-1"></span> SVR</span>
+              <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block mr-1"></span> RF</span>
+              <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-purple-500 inline-block mr-1"></span> Naive</span>
+            </div>
+          </div>
+          <div class="h-64">
+            <canvas id="modelComparisonChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Overfitting Check & Hyperparameters -->
+        <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-semibold text-white">Overfitting Check</h2>
+              <span class="text-xs text-slate-400 font-mono">Train vs Test R²</span>
+            </div>
+            <div class="h-44">
+              <canvas id="overfittingChart"></canvas>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-700/60">
+            <div class="text-xs font-semibold text-slate-300 mb-2">Optimal Hyperparameters</div>
+            <div class="space-y-1.5 text-xs font-mono">
+              <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-slate-300">
+                <span class="text-rose-400 font-semibold">SVR:</span> <span id="bestSvrParamsText">C=10, kernel='rbf', gamma='scale'</span>
+              </div>
+              <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-slate-300">
+                <span class="text-emerald-400 font-semibold">RF:</span> <span id="bestRfParamsText">n_estimators=100, max_depth=20</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Test Predictions Snapshot -->
+      <div class="glass-panel p-5 rounded-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-white">Recent Test Set Forecast vs Actual</h2>
+            <p class="text-xs text-slate-400">Chronological out-of-sample evaluation window</p>
+          </div>
+          <button onclick="switchTab('tab-predictions')" class="text-xs text-blue-400 hover:text-blue-300 flex items-center space-x-1 font-medium">
+            <span>Full Analysis</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="h-72">
+          <canvas id="quickForecastChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: PREDICTIONS & RESIDUALS -->
+    <div id="tab-predictions" class="tab-content hidden space-y-6">
+      <!-- Full Actual vs Predicted Chart -->
+      <div class="glass-panel p-5 rounded-2xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-white">Actual vs Predicted Price (USD/bbl)</h2>
+            <p class="text-xs text-slate-400">Interactive timeline with zooming and model comparison on the test set</p>
+          </div>
+          <!-- Legend / Toggles -->
+          <div class="flex flex-wrap items-center gap-3 text-xs">
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggleActual" checked class="form-checkbox text-indigo-500 rounded bg-slate-800 border-slate-700" onchange="updatePredictionsSeries()">
+              <span class="ml-1.5 font-medium text-indigo-300">● Actual Price</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggleSvr" checked class="form-checkbox text-rose-500 rounded bg-slate-800 border-slate-700" onchange="updatePredictionsSeries()">
+              <span class="ml-1.5 font-medium text-rose-400">-- SVR Predicted</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggleRf" checked class="form-checkbox text-emerald-500 rounded bg-slate-800 border-slate-700" onchange="updatePredictionsSeries()">
+              <span class="ml-1.5 font-medium text-emerald-400">-- RF Predicted</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggleNaive" checked class="form-checkbox text-purple-500 rounded bg-slate-800 border-slate-700" onchange="updatePredictionsSeries()">
+              <span class="ml-1.5 font-medium text-purple-400">·· Naive Lag-1</span>
+            </label>
+          </div>
+        </div>
+        <div class="h-96">
+          <canvas id="fullPredictionsChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Residuals Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Residuals over Time -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Residuals Over Time ($e_t = y_t - \hat{y}_t$)</h2>
+              <p class="text-xs text-slate-400">Zero-line indicates perfect prediction; check for homoscedasticity</p>
+            </div>
+            <div class="flex items-center space-x-2 text-xs">
+              <button onclick="setResidualModel('svr')" id="resModelSvrBtn" class="px-2.5 py-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">SVR</button>
+              <button onclick="setResidualModel('rf')" id="resModelRfBtn" class="px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700">RF</button>
+            </div>
+          </div>
+          <div class="h-72">
+            <canvas id="residualsTimeChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Residual Percentage Distribution Histogram -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Residual Percentage Distribution (%)</h2>
+              <p class="text-xs text-slate-400">Normality check: residuals centered tightly around zero</p>
+            </div>
+            <span class="text-xs font-mono text-slate-400" id="residualStatsBadge">Mean: 0.00 | Std: --</span>
+          </div>
+          <div class="h-72">
+            <canvas id="residualHistChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: MARKET EDA -->
+    <div id="tab-eda" class="tab-content hidden space-y-6">
+      <!-- Full Historical Time Series with Outliers -->
+      <div class="glass-panel p-5 rounded-2xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-white">Historical Crude Oil Price & Event Outliers</h2>
+            <p class="text-xs text-slate-400">Full historical dataset with Tukey's IQR ($1.5 \times IQR$) real-market outlier tags</p>
+          </div>
+          <div class="flex items-center space-x-3 text-xs">
+            <span class="inline-flex items-center text-slate-300"><span class="w-3 h-0.5 bg-indigo-500 inline-block mr-1"></span> Oil Price</span>
+            <span class="inline-flex items-center text-rose-400"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block mr-1"></span> IQR Outlier</span>
+          </div>
+        </div>
+        <div class="h-80">
+          <canvas id="edaTimeSeriesChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Distribution & OPEC Policy Impact -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Price Distribution Histogram -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Price Frequency Distribution</h2>
+              <p class="text-xs text-slate-400">Histogram of historical crude oil settlement prices</p>
+            </div>
+            <div class="text-xs font-mono text-slate-300" id="priceDistributionStats">Min: $-- | Max: $--</div>
+          </div>
+          <div class="h-72">
+            <canvas id="edaDistributionChart"></canvas>
+          </div>
+        </div>
+
+        <!-- OPEC Policy Boxplot/Group Stats -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Oil Price by OPEC Policy Stance</h2>
+              <p class="text-xs text-slate-400">Price distribution during Production Cut, No Change, and Production Increase</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">Market Driver</span>
+          </div>
+          <div class="h-72">
+            <canvas id="edaOpecChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scatters: Demand vs Price & USD Index vs Price -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Demand vs Price -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-base font-semibold text-white">Global Demand vs Crude Oil Price</h2>
+              <p class="text-xs text-slate-400">Demand (Mbbl/day) with trendline</p>
+            </div>
+            <span class="text-xs font-mono text-slate-400">Mbbl/day</span>
+          </div>
+          <div class="h-72">
+            <canvas id="edaDemandScatterChart"></canvas>
+          </div>
+        </div>
+
+        <!-- USD Index vs Price -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-base font-semibold text-white">USD Index vs Crude Oil Price</h2>
+              <p class="text-xs text-slate-400">Inverse currency relationship analysis</p>
+            </div>
+            <span class="text-xs font-mono text-slate-400">DXY</span>
+          </div>
+          <div class="h-72">
+            <canvas id="edaUsdScatterChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: MODEL DIAGNOSTICS & EXPLAINABILITY -->
+    <div id="tab-diagnostics" class="tab-content hidden space-y-6">
+      <!-- Feature Importance SVR vs RF -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- SVR Permutation Feature Importance -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">SVR Permutation Feature Importance</h2>
+              <p class="text-xs text-slate-400">Mean decrease in test R² when feature values are permuted</p>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 font-mono">20 Iterations</span>
+          </div>
+          <div class="h-80">
+            <canvas id="svrImportanceChart"></canvas>
+          </div>
+        </div>
+
+        <!-- RF Gini Impurity Feature Importance -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Random Forest Built-in Importance</h2>
+              <p class="text-xs text-slate-400">Mean decrease in impurity across all decision trees</p>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono">Ensemble Gini</span>
+          </div>
+          <div class="h-80">
+            <canvas id="rfImportanceChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Learning Curves: SVR vs RF -->
+      <div class="glass-panel p-5 rounded-2xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-white">Learning Curves — Generalization vs Overfitting</h2>
+            <p class="text-xs text-slate-400">Tracking Train R² and Validation R² across growing sample fractions</p>
+          </div>
+          <div class="flex items-center space-x-3 text-xs">
+            <span class="inline-flex items-center text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block mr-1"></span> Train R²</span>
+            <span class="inline-flex items-center text-slate-400"><span class="w-2.5 h-2.5 rounded border border-blue-400 border-dashed inline-block mr-1"></span> Validation R²</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="h-72">
+            <canvas id="svrLearningCurveChart"></canvas>
+          </div>
+          <div class="h-72">
+            <canvas id="rfLearningCurveChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Support Vectors & Decision Tree Anatomy -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Support Vectors Card -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">SVR Support Vector Distribution</h2>
+              <p class="text-xs text-slate-400">Points within or violating the $\epsilon$-insensitive margin tube</p>
+            </div>
+            <div class="text-right">
+              <span class="text-sm font-bold font-mono text-rose-400" id="supportVecCount">--</span>
+              <div class="text-[10px] text-slate-500" id="supportVecPct">--% of train data</div>
+            </div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs text-slate-300 leading-relaxed">
+            <p><strong class="text-white">Support Vector Machines for Regression:</strong> SVR constructs an optimal hyperplane in high-dimensional kernel space where errors within threshold $\epsilon$ carry zero penalty.</p>
+            <p>Data points defining the boundaries are stored as <span class="text-rose-400 font-semibold">Support Vectors</span>. The low density of support vectors confirms a parsimonious, well-regularized solution avoiding sample memorization.</p>
+          </div>
+        </div>
+
+        <!-- Decision Tree Top Node Splits -->
+        <div class="glass-panel p-5 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-semibold text-white">Random Forest Top Decision Rules</h2>
+              <p class="text-xs text-slate-400">Hierarchical feature thresholds from primary estimator tree</p>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono">Tree 1 Preview</span>
+          </div>
+          <div class="overflow-y-auto max-h-56 custom-scrollbar">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="text-[11px] text-slate-400 uppercase border-b border-slate-800 sticky top-0 bg-slate-900/90">
+                <tr>
+                  <th class="py-2 px-2">Node</th>
+                  <th class="py-2 px-2">Decision Split</th>
+                  <th class="py-2 px-2">Samples</th>
+                  <th class="py-2 px-2">Target Avg</th>
+                </tr>
+              </thead>
+              <tbody id="treeRulesTableBody" class="divide-y divide-slate-800/60 text-slate-300">
+                <tr>
+                  <td colspan="4" class="py-3 text-center text-slate-500">Loading tree structure...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: WHAT-IF SCENARIO SIMULATOR -->
+    <div id="tab-simulator" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Interactive Controls Panel -->
+        <div class="glass-panel p-6 rounded-2xl lg:col-span-2 space-y-6">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center space-x-2">
+                <i data-lucide="sliders" class="w-5 h-5 text-blue-400"></i>
+                <span>Market Conditions & Scenario Driver</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Adjust global macro variables to simulate real-time price predictions</p>
+            </div>
+            <button onclick="resetSimulator()" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700">
+              Reset to Latest
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Demand Slider -->
+            <div class="space-y-2">
+              <div class="flex justify-between items-center text-xs">
+                <label class="font-medium text-slate-200">Global Demand (Mbbl/day)</label>
+                <span class="font-mono font-bold text-blue-400 text-sm" id="simDemandVal">101.5</span>
+              </div>
+              <input type="range" id="simDemand" min="80" max="115" step="0.1" value="101.5" class="w-full accent-blue-500 cursor-pointer" oninput="runSimulation()">
+              <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                <span>80.0</span>
+                <span>Normal ~100.0</span>
+                <span>115.0</span>
+              </div>
+            </div>
+
+            <!-- USD Index Slider -->
+            <div class="space-y-2">
+              <div class="flex justify-between items-center text-xs">
+                <label class="font-medium text-slate-200">USD Index (DXY)</label>
+                <span class="font-mono font-bold text-blue-400 text-sm" id="simUsdVal">103.5</span>
+              </div>
+              <input type="range" id="simUsd" min="75" max="120" step="0.1" value="103.5" class="w-full accent-blue-500 cursor-pointer" oninput="runSimulation()">
+              <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                <span>75.0</span>
+                <span>Baseline ~100.0</span>
+                <span>120.0</span>
+              </div>
+            </div>
+
+            <!-- OPEC Policy Selector -->
+            <div class="space-y-2">
+              <label class="block text-xs font-medium text-slate-200">OPEC Policy Stance</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="setSimOpec(-1)" id="simOpecCutBtn" class="py-2 px-3 rounded-lg text-xs font-semibold border border-slate-700 bg-slate-800 text-slate-300 hover:border-rose-500 transition">
+                  Production Cut (-1)
+                </button>
+                <button type="button" onclick="setSimOpec(0)" id="simOpecNoBtn" class="py-2 px-3 rounded-lg text-xs font-semibold border border-blue-500/50 bg-blue-500/20 text-blue-300">
+                  No Change (0)
+                </button>
+                <button type="button" onclick="setSimOpec(1)" id="simOpecIncBtn" class="py-2 px-3 rounded-lg text-xs font-semibold border border-slate-700 bg-slate-800 text-slate-300 hover:border-emerald-500 transition">
+                  Increase (+1)
+                </button>
+              </div>
+            </div>
+
+            <!-- Lag 1 Price Slider -->
+            <div class="space-y-2">
+              <div class="flex justify-between items-center text-xs">
+                <label class="font-medium text-slate-200">Previous Month Price ($Lag_1$)</label>
+                <span class="font-mono font-bold text-blue-400 text-sm" id="simLag1Val">$78.50</span>
+              </div>
+              <input type="range" id="simLag1" min="30" max="140" step="0.5" value="78.5" class="w-full accent-blue-500 cursor-pointer" oninput="runSimulation()">
+              <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                <span>$30.00</span>
+                <span>$85.00</span>
+                <span>$140.00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Secondary Lags Accordion -->
+          <div class="pt-4 border-t border-slate-800/80">
+            <details class="group">
+              <summary class="text-xs text-slate-400 hover:text-slate-200 cursor-pointer flex items-center justify-between select-none">
+                <span class="font-medium">Advanced Historical Lags & Seasonality Settings</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 transition group-open:rotate-180"></i>
+              </summary>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                <div>
+                  <label class="block text-[11px] text-slate-400 mb-1">Lag 2 ($t-2$) Price ($)</label>
+                  <input type="number" id="simLag2" value="79.0" step="0.5" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono" onchange="runSimulation()">
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-400 mb-1">Lag 3 ($t-3$) Price ($)</label>
+                  <input type="number" id="simLag3" value="81.2" step="0.5" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono" onchange="runSimulation()">
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-400 mb-1">Forecast Month</label>
+                  <select id="simMonth" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white" onchange="runSimulation()">
+                    <option value="1">January (Q1)</option>
+                    <option value="4">April (Q2)</option>
+                    <option value="7">July (Q3)</option>
+                    <option value="10" selected>October (Q4)</option>
+                  </select>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Live Prediction Output Card -->
+        <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+          <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+          
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Model Forecast</span>
+              <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Active</span>
+              </span>
+            </div>
+
+            <!-- Ensemble Main Number -->
+            <div class="my-6 text-center">
+              <div class="text-xs text-slate-400 uppercase tracking-wider font-medium">Model Consensus Prediction</div>
+              <div class="text-5xl font-extrabold font-mono text-white mt-2 tracking-tight" id="simEnsemblePrice">$---</div>
+              <div class="text-xs font-mono mt-1 text-slate-400" id="simDeltaVsLag1">Δ -- vs Previous Month</div>
+            </div>
+
+            <!-- Individual Model Comparison -->
+            <div class="space-y-3 pt-3 border-t border-slate-800 font-mono text-xs">
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div class="flex items-center space-x-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                  <span class="text-slate-300">SVR Prediction:</span>
+                </div>
+                <span class="font-bold text-rose-400 text-sm" id="simSvrPrice">$---</span>
+              </div>
+
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div class="flex items-center space-x-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span class="text-slate-300">Random Forest:</span>
+                </div>
+                <span class="font-bold text-emerald-400 text-sm" id="simRfPrice">$---</span>
+              </div>
+
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div class="flex items-center space-x-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                  <span class="text-slate-300">Naive Benchmark:</span>
+                </div>
+                <span class="font-bold text-purple-400 text-sm" id="simNaivePrice">$---</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-3 text-[11px] text-slate-400 text-center border-t border-slate-800/80">
+            Predictions computed on the fly using standard scalers & trained estimators.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: DATASET EXPLORER -->
+    <div id="tab-data" class="tab-content hidden space-y-6">
+      <div class="glass-panel p-5 rounded-2xl">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-white">Processed Dataset & Final Predictions</h2>
+            <p class="text-xs text-slate-400">Features, targets, test set forecasts, residuals, and outlier flags</p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <!-- Search Input -->
+            <div class="relative">
+              <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+              <input type="text" id="tableSearchInput" placeholder="Filter rows..." class="bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" oninput="debounceSearch()">
+            </div>
+            <!-- Export Button -->
+            <a href="/api/export" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white flex items-center space-x-1.5 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Excel (.xlsx)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Scrollable Table -->
+        <div class="overflow-x-auto custom-scrollbar border border-slate-800 rounded-xl">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="text-[11px] text-slate-400 uppercase bg-slate-900 border-b border-slate-800" id="datasetTableHead">
+              <!-- Dynamically populated -->
+            </thead>
+            <tbody id="datasetTableBody" class="divide-y divide-slate-800/60 bg-slate-950/40 text-slate-300">
+              <tr>
+                <td class="py-4 text-center text-slate-500" colspan="10">Loading records...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="flex items-center justify-between pt-4 text-xs text-slate-400">
+          <div id="tablePaginationInfo">Showing 1 to 50 of -- records</div>
+          <div class="flex items-center space-x-2">
+            <button onclick="prevTablePage()" id="prevPageBtn" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+            <span class="px-2 font-mono text-white" id="currentPageNumber">1</span>
+            <button onclick="nextTablePage()" id="nextPageBtn" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: UPLOAD & TUNING -->
+    <div id="tab-upload" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- File Upload Box -->
+        <div class="glass-panel p-6 rounded-2xl">
+          <div class="mb-4">
+            <h2 class="text-base font-semibold text-white">Upload New Crude Oil Dataset</h2>
+            <p class="text-xs text-slate-400">Upload an updated Excel (.xlsx/.xls) or CSV file with market variables</p>
+          </div>
+
+          <form id="uploadForm" onsubmit="handleFileUpload(event)" class="space-y-4">
+            <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-blue-500 rounded-xl p-8 text-center cursor-pointer transition bg-slate-900/40">
+              <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="fileSelected(event)">
+              <div class="flex flex-col items-center space-y-2">
+                <i data-lucide="upload-cloud" class="w-10 h-10 text-slate-400"></i>
+                <div class="text-sm font-medium text-slate-300" id="uploadFileName">Click to select or drag & drop file</div>
+                <div class="text-xs text-slate-500">Supports .xlsx, .xls, .csv containing Date, Demand, USD Index, Price</div>
+              </div>
+            </div>
+
+            <button type="submit" id="uploadSubmitBtn" class="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg shadow-blue-500/20 disabled:opacity-50">
+              Upload & Retrain Pipeline
+            </button>
+          </form>
+
+          <div class="mt-6 p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 space-y-1">
+            <div class="font-semibold text-slate-200">Required Columns:</div>
+            <p><code class="text-blue-400">Date</code>: e.g. 01-01-2020</p>
+            <p><code class="text-blue-400">Price (USD/bbl)</code>: Settlement price target</p>
+            <p><code class="text-blue-400">Demand (Mbbl/day)</code>: Consumption volumes</p>
+            <p><code class="text-blue-400">USD Index</code>: DXY Currency Index</p>
+            <p><code class="text-blue-400">OPEC Policy</code>: Increase, Cut, or No Change</p>
+          </div>
+        </div>
+
+        <!-- Hyperparameter Tuning & Split Slider -->
+        <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+          <div>
+            <div class="mb-4">
+              <h2 class="text-base font-semibold text-white">Pipeline Hyperparameters</h2>
+              <p class="text-xs text-slate-400">Configure time-series splitting and RandomizedSearchCV search budget</p>
+            </div>
+
+            <div class="space-y-6">
+              <!-- Split Ratio Slider -->
+              <div class="space-y-2">
+                <div class="flex justify-between items-center text-xs">
+                  <label class="font-medium text-slate-200">Test Split Ratio</label>
+                  <span class="font-mono font-bold text-blue-400 text-sm" id="testSplitVal">30% (70-30 Split)</span>
+                </div>
+                <input type="range" id="testSplitInput" min="0.15" max="0.40" step="0.05" value="0.30" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('testSplitVal').textContent = `${Math.round(this.value * 100)}% (${Math.round((1-this.value)*100)}-${Math.round(this.value*100)} Split)`">
+                <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <span>15% Test</span>
+                  <span>30% Standard</span>
+                  <span>40% Test</span>
+                </div>
+              </div>
+
+              <!-- Tuning Iterations Slider -->
+              <div class="space-y-2">
+                <div class="flex justify-between items-center text-xs">
+                  <label class="font-medium text-slate-200">RandomizedSearchCV Iterations</label>
+                  <span class="font-mono font-bold text-blue-400 text-sm" id="tuneIterVal">15 iterations</span>
+                </div>
+                <input type="range" id="tuneIterInput" min="5" max="25" step="1" value="15" class="w-full accent-blue-500 cursor-pointer" oninput="document.getElementById('tuneIterVal').textContent = `${this.value} iterations`">
+                <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <span>5 (Fastest)</span>
+                  <span>15 (Balanced)</span>
+                  <span>25 (Deep Search)</span>
+                </div>
+              </div>
+
+              <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 space-y-2">
+                <div class="font-semibold text-slate-200">Validation Protocol:</div>
+                <p>Features 5-split forward-chaining <code class="text-blue-400">TimeSeriesSplit</code> to guarantee zero temporal data leakage during hyperparameter cross-validation.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-slate-800">
+            <button onclick="triggerRetrain()" id="retrainBtn" class="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg shadow-emerald-500/20">
+              Retrain Pipeline Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 bg-slate-900/50 py-4 text-center text-xs text-slate-500">
+    Crude Oil Price Prediction Platform — Antigravity Machine Learning Dashboard
+  </footer>
+
+  <!-- Scripts -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
